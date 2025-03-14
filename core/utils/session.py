@@ -11,12 +11,13 @@ class BaseClient:
 
         self.website_headers = {
             'authority': 'api.getgrass.io',
-            'accept': 'application/json, text/plain, */*',
-            'accept-language': 'uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7',
+            'accept': 'application/json, text/plain, */*',  # Исправлено
+            'accept-language': 'en-US,en;q=0.9,uk;q=0.8',
+            'accept-encoding': 'gzip, deflate, br, zstd',
             'content-type': 'application/json',
             'origin': 'https://app.getgrass.io',
             'referer': 'https://app.getgrass.io/',
-            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="132", "Google Chrome";v="132"',
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-platform': '"Windows"',
             'sec-fetch-dest': 'empty',
@@ -24,3 +25,4 @@ class BaseClient:
             'sec-fetch-site': 'same-site',
             'user-agent': self.user_agent,
         }
+

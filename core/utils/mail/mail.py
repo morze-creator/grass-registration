@@ -1,14 +1,11 @@
 import time
 import asyncio
-from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict
-
-from imap_tools import AND #, MailBox
+from imap_tools import AND
 from loguru import logger
-
 from core.utils.mail.mailbox import MailBox
 from data.config import EMAIL_FOLDER, IMAP_DOMAIN, SINGLE_IMAP_ACCOUNT, USE_PROXY_FOR_IMAP
-
+from datetime import datetime, timezone, timedelta
 
 class MailUtils:
     def __init__(self, email: str, imap_pass: str, proxy: str = None) -> None:
@@ -16,6 +13,7 @@ class MailUtils:
             self.email: str = SINGLE_IMAP_ACCOUNT.split(":")[0]
         else:
             self.email: str = email
+
         self.imap_pass: str = imap_pass
         self.domain: str = IMAP_DOMAIN or self.parse_domain()
 
@@ -42,6 +40,8 @@ class MailUtils:
             domain = "gmx.net"
         elif "firemail" in domain:
             domain = "firemail.de"
+        elif "icloud" in domain:
+            domain = "imap.mail.me"
 
         return f"imap.{domain}"
 
@@ -53,14 +53,14 @@ class MailUtils:
             seen: Optional[bool] = None,
             limit: Optional[int] = None,
             reverse: bool = True,
-            delay: int = 60
+            delay: int = 60,
+            utc_now: datetime = datetime.now(timezone.utc)  # Значение по умолчанию
     ) -> Dict[str, any]:
-
 
         if EMAIL_FOLDER:
             email_folders = [EMAIL_FOLDER]
         else:
-            email_folders = ["INBOX", "Junk", "JUNK", "Spam", "SPAM", "TRASH", "Trash"]
+            email_folders = ["INBOX", "Junk", "JUNK", "Spam", "SPAM", "TRASH", "Trash", "Спам"]
 
         with MailBox(
                 self.domain,
@@ -74,17 +74,28 @@ class MailUtils:
                 try:
                     for folder in folders:
                         mailbox.folder.set(folder)
-                        criteria = AND(subject=subject, to=to, from_=from_, seen=seen)
-
-                        for msg in mailbox.fetch(criteria, limit=limit, reverse=reverse):
-                            logger.success(f'{self.email} | Successfully found new msg by subject: {msg.subject}')
-                            return {
-                                "success": True,
-                                "msg": msg.html,
-                                "subject": msg.subject,
-                                "from": msg.from_,
-                                "to": msg.to
-                            }
+                        if "gazeta.pl" in self.domain:
+                            for msg in mailbox.fetch(limit=1, reverse=reverse):
+                                if subject and subject.lower() in msg.subject.lower():
+                                    return {
+                                        "success": True,
+                                        "msg": msg.html,
+                                        "subject": msg.subject,
+                                        "from": msg.from_,
+                                        "to": msg.to
+                                    }
+                        else:
+                            criteria = AND(to=to, from_=from_)
+                            for msg in mailbox.fetch(criteria, limit=1, reverse=reverse):
+                                if msg.date > utc_now:
+                                    mailbox.flag(msg.uid, "\\Seen", True)
+                                    return {
+                                        "success": True,
+                                        "msg": msg.html,
+                                        "subject": msg.subject,
+                                        "from": msg.from_,
+                                        "to": msg.to
+                                    }
                 except Exception as error:
                     logger.error(f'{self.email} | Error when fetching new message by subject: {str(error)}')
 
@@ -98,23 +109,20 @@ class MailUtils:
             seen: Optional[bool] = None,
             limit: Optional[int] = None,
             reverse: bool = True,
-            delay: int = 60
+            delay: int = 60,
+            utc_now: datetime = datetime.now(timezone.utc)  # Значение по умолчанию
     ) -> Dict[str, any]:
-        return await asyncio.to_thread(self.get_msg, to, subject, from_, seen, limit, reverse, delay)
+        return await asyncio.to_thread(self.get_msg, to, subject, from_, seen, limit, reverse, delay, utc_now)
 
 
+# Пример использования:
 # if __name__ == '__main__':
-#     email = ""
-#     imap_pass = ""
+#     email = "kathyxobige@gazeta.pl"
+#     imap_pass = "your_password"
 #     mail_utils = MailUtils(email, imap_pass)
 #
-#     # Asynchronous call
 #     async def main():
-#         result = await mail_utils.get_msg_async(to=email, from_="support@wynd.network", subject="Verify Your Email for Grass")
+#         result = await mail_utils.get_msg_async(subject="Verify Your Email for Grass")
 #         print(result)
-#         if result['success']:
-#             verify_link = result['msg'].split('<![endif]-->\r\n    <a href="')[1].split('"')[0]
-#             print(verify_link)
-#
 #
 #     asyncio.run(main())

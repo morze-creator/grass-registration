@@ -7,8 +7,6 @@ import aiohttp
 from fake_useragent import UserAgent
 from tenacity import stop_after_attempt, retry, retry_if_not_exception_type, wait_random, retry_if_exception_type
 
-from data.config import MIN_PROXY_SCORE, CHECK_POINTS, STOP_ACCOUNTS_WHEN_SITE_IS_DOWN, NODE_TYPE
-
 try:
     from data.config import SHOW_LOGS_RARELY
 except ImportError:
@@ -31,7 +29,14 @@ class Grass(GrassWs, GrassRest, FailureCounter):
 
     def __init__(self, _id: int, email: str, password: str, proxy: str = None, db: AccountsDB = None):
         self.proxy = Proxy.from_str(proxy).as_url if proxy else None
-        super(GrassWs, self).__init__(email=email, password=password, user_agent=UserAgent().random, proxy=self.proxy)
+        
+        chrome_versions =  ["132.0.0.0"]
+        webkit_versions = [str(random.randint(500, 605)) + "." + str(random.randint(1, 50))]
+
+        user_agent = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/{random.choice(webkit_versions)} (KHTML, like Gecko) Chrome/{random.choice(chrome_versions)} Safari/{random.choice(webkit_versions)}"
+        
+        
+        super(GrassWs, self).__init__(email=email, password=password, user_agent=user_agent, proxy=self.proxy)
         self.proxy_score: Optional[int] = None
         self.id: int = _id
 
@@ -50,99 +55,93 @@ class Grass(GrassWs, GrassRest, FailureCounter):
         if self.db:
             self.proxies = await self.db.get_proxies_by_email(self.email)
         self.log_global_count(True)
-        # logger.info(f"{self.id} | {self.email} | Starting...")
-        while True:
-            try:
-                Grass.is_site_down()
+        #logger.info(f"{self.id} | {self.email} | Starting...")
+        try:
+            Grass.is_site_down()
 
-                user_id = await self.enter_account()
+            user_id = await self.enter_account()
 
-                browser_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, self.proxy or ""))
+            browser_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, self.proxy or ""))
 
-                await self.run(browser_id, user_id)
-            except LoginException as e:
-                logger.warning(f"LoginException | {self.id} | {e}")
-                return False
-            except (ProxyBlockedException, ProxyForbiddenException) as e:
-                # self.proxies.remove(self.proxy)
-                msg = "Proxy forbidden"
-            except ProxyError:
-                msg = "Low proxy score"
-            except WebsocketConnectionFailedError:
-                msg = "Websocket connection failed"
-                self.reach_fail_limit()
-            except aiohttp.ClientError as e:
-                msg = f"{str(e.args[0])[:30]}..." if "</html>" not in str(e) else "Html page response, 504"
-            except FailureLimitReachedException as e:
-                msg = "Failure limit reached"
-                self.reach_fail_limit()
-            except SiteIsDownException as e:
-                msg = f"Site is down!"
-                self.reach_fail_limit()
-            else:
-                msg = ""
+            #await self.run(browser_id, user_id)
+        except LoginException as e:
+            logger.warning(f"LoginException | {self.id} | {e}")
+            return False
+        except (ProxyBlockedException, ProxyForbiddenException) as e:
+            # self.proxies.remove(self.proxy)
+            msg = "Proxy forbidden"
+        except ProxyError:
+            msg = "Low proxy score"
+        except WebsocketConnectionFailedError:
+            msg = "Websocket connection failed"
+            self.reach_fail_limit()
+        except aiohttp.ClientError as e:
+            msg = f"{str(e.args[0])[:30]}..." if "</html>" not in str(e) else "Html page response, 504"
+        except FailureLimitReachedException as e:
+            msg = "Failure limit reached"
+            self.reach_fail_limit()
+        except SiteIsDownException as e:
+            msg = f"Site is down!"
+            self.reach_fail_limit()
+        else:
+            msg = ""
 
-            await self.failure_handler(
-                is_raise=False,
-            )
+        await self.failure_handler(
+            is_raise=False,
+        )
 
-            await self.change_proxy()
-            logger.info(f"{self.id} | Changed proxy to {self.proxy}. {msg}. Retrying...")
+    # async def run(self, browser_id: str, user_id: str):
+        # while True:
+            # try:
+                # await self.connection_handler()
 
-            await asyncio.sleep(random.uniform(20, 21))
+                # await self.auth_to_extension(browser_id, user_id)
 
-    async def run(self, browser_id: str, user_id: str):
-        while True:
-            try:
-                await self.connection_handler()
+                # if NODE_TYPE != "2x":
+                    # await self.handle_http_request_action()
 
-                await self.auth_to_extension(browser_id, user_id)
+                # for i in range(10 ** 9):
+                    # if MIN_PROXY_SCORE and self.proxy_score is None:
+                        # if i < 3:
+                            # await self.handle_proxy_score(MIN_PROXY_SCORE, browser_id)
+                        # else:
+                            # raise ProxyScoreNotFoundException("Proxy score not found")
 
-                if NODE_TYPE != "2x":
-                    await self.handle_http_request_action()
+                    # await self.send_ping()
+                    # await self.send_pong()
 
-                for i in range(10 ** 9):
-                    if MIN_PROXY_SCORE and self.proxy_score is None:
-                        if i < 3:
-                            await self.handle_proxy_score(MIN_PROXY_SCORE, browser_id)
-                        else:
-                            raise ProxyScoreNotFoundException("Proxy score not found")
+                    # if SHOW_LOGS_RARELY:
+                        # if not (i % 10):
+                            # logger.info(f"{self.id} | Mined grass.")
+                    # else:
+                        # logger.info(f"{self.id} | Mined grass.")
 
-                    await self.send_ping()
-                    await self.send_pong()
+                    # if MIN_PROXY_SCORE and self.proxy_score is None:
+                        # await self.handle_proxy_score(MIN_PROXY_SCORE, browser_id)
 
-                    if SHOW_LOGS_RARELY:
-                        if not (i % 10):
-                            logger.info(f"{self.id} | Mined grass.")
-                    else:
-                        logger.info(f"{self.id} | Mined grass.")
+                    # if CHECK_POINTS and not (i % 100):
+                        # points = await self.get_points_handler()
+                        # await self.db.update_or_create_point_stat(self.id, self.email, points)
+                        # logger.info(f"{self.id} | Total points: {points}")
+                    # # if not (i % 1000):
+                    # #     total_points = await self.db.get_total_points()
+                    # #     logger.info(f"Total points in database: {total_points or 0}")
+                    # if i:
+                        # self.fail_reset()
 
-                    if MIN_PROXY_SCORE and self.proxy_score is None:
-                        await self.handle_proxy_score(MIN_PROXY_SCORE, browser_id)
+                    # await asyncio.sleep(random.randint(119, 120))
+            # except (WebsocketClosedException, ConnectionResetError, TypeError) as e:
+                # logger.info(f"{self.id} | {type(e).__name__}: {e}. Reconnecting...")
+            # # except ConnectionResetError as e:
+            # #     logger.info(f"{self.id} | Connection reset: {e}. Reconnecting...")
+            # # except TypeError as e:
+            # #     logger.info(f"{self.id} | Type error: {e}. Reconnecting...")
+                # # await self.delay_with_log(msg=f"{self.id} | Reconnecting with delay for some minutes...", sleep_time=60)
+            # # except Exception as e:
+            # #     logger.info(f"{self.id} | {traceback.format_exc()}")
+            # await self.failure_handler(limit=3)
 
-                    if CHECK_POINTS and not (i % 100):
-                        points = await self.get_points_handler()
-                        await self.db.update_or_create_point_stat(self.id, self.email, points)
-                        logger.info(f"{self.id} | Total points: {points}")
-                    # if not (i % 1000):
-                    #     total_points = await self.db.get_total_points()
-                    #     logger.info(f"Total points in database: {total_points or 0}")
-                    if i:
-                        self.fail_reset()
-
-                    await asyncio.sleep(random.randint(119, 120))
-            except (WebsocketClosedException, ConnectionResetError, TypeError) as e:
-                logger.info(f"{self.id} | {type(e).__name__}: {e}. Reconnecting...")
-            # except ConnectionResetError as e:
-            #     logger.info(f"{self.id} | Connection reset: {e}. Reconnecting...")
-            # except TypeError as e:
-            #     logger.info(f"{self.id} | Type error: {e}. Reconnecting...")
-                # await self.delay_with_log(msg=f"{self.id} | Reconnecting with delay for some minutes...", sleep_time=60)
-            # except Exception as e:
-            #     logger.info(f"{self.id} | {traceback.format_exc()}")
-            await self.failure_handler(limit=3)
-
-            await asyncio.sleep(5, 10)
+            # await asyncio.sleep(5, 10)
 
     async def claim_rewards(self):
         await self.enter_account()
@@ -212,9 +211,3 @@ class Grass(GrassWs, GrassRest, FailureCounter):
         self.proxies.append(proxy)
 
         return proxy
-
-    @staticmethod
-    def is_site_down():
-        if STOP_ACCOUNTS_WHEN_SITE_IS_DOWN and Grass.is_global_error():
-            logger.info(f"Site is down. Sleeping for non-working accounts...")
-            raise SiteIsDownException()

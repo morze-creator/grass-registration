@@ -13,10 +13,7 @@ class CaptchaService:
         
         return {
             "2captcha": data.config.TWO_CAPTCHA_API_KEY,
-            "anticaptcha": data.config.ANTICAPTCHA_API_KEY,
-            "capmonster": data.config.CAPMONSTER_API_KEY,
-            "capsolver": data.config.CAPSOLVER_API_KEY,
-            "captchaai": data.config.CAPTCHAAI_API_KEY,
+            "anticaptcha": data.config.ANTICAPTCHA_API_KEY
         }
 
     def get_captcha_token(self):

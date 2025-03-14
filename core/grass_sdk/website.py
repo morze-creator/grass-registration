@@ -17,15 +17,22 @@ from core.utils.generate.person import Person
 from core.utils.mail.mail import MailUtils
 from core.utils.session import BaseClient
 from solders.keypair import Keypair
+from datetime import datetime, timezone
+from data.config import EMAIL_WAIT_TIMEOUT
 
-from data.config import SEMI_AUTOMATIC_APPROVE_LINK
+import re
 
+#try:
+#    from data.config import REF_CODE
+#except ImportError:
+#    REF_CODE = ""
+    
+import random
 
 try:
-    from data.config import REF_CODE
+    from data.config import REF_CODES
 except ImportError:
-    REF_CODE = ""
-
+    REF_CODES = []
 
 class GrassRest(BaseClient):
     def __init__(self, email: str, password: str, user_agent: str = None, proxy: str = None):
@@ -40,49 +47,57 @@ class GrassRest(BaseClient):
             stop=stop_after_attempt(12),
             before_sleep=lambda retry_state, **kwargs: logger.info(f"{self.id} | Create Account Retrying...  | "
                                                                    f"{retry_state.outcome.exception()} "),
-            wait=wait_random(5, 8),
+            wait=wait_random(5, 80),
             reraise=True
         )
 
         return await handler(self.create_account)()
 
-    async def create_account(self):
-        url = 'https://api.getgrass.io/register'
+    async def create_account(self, imap_pass: str):
+        url = 'https://api.getgrass.io/sendOtp'
+        
+        REF_CODE = random.choice(REF_CODES) if REF_CODES else ""
 
-        params = {
-            'app': 'dashboard',
-        }
-
-        response = await self.session.post(url, headers=self.website_headers, json=await self.get_json_params(params,
-                                                                                                              REF_CODE),
-                                           proxy=self.proxy)
-        if response.status != 200 or "error" in await response.text():
-            if "Email Already Registered" in await response.text() or \
-                "Your registration could not be completed at this time." in await response.text():
-                logger.info(f"{self.email} | Email already registered!")
-                return
-            elif "Gateway" in await response.text():
+        json_data = await self.get_json_params(REF_CODE)
+        
+        now = datetime.now(timezone.utc)
+        await asyncio.sleep(2)
+        
+        response = await self.session.post(url, headers=self.website_headers, json=json_data, proxy=self.proxy)
+        
+        response_text = await response.text()
+        if response.status != 200 or "error" in response_text:
+            if "Gateway" in response_text:
                 raise RegistrationException(f"{self.id} | Create acc response: | html 504 gateway error")
-            error_msg = (await response.json())['error']['message']
 
-            raise RegistrationException(f"Create acc response: | {error_msg}")
+            raise RegistrationException(f"Create acc response: | {response_text} {response.status}")
 
-        logger.info(f"{self.email} | Account created!")
+        logger.success(f"{self.id} | {self.email} | Account created!")
+        
+        response = await self.confirm_email(imap_pass, now)
+        
+        if response:
+            with open("logs/new_accounts.txt", "a", encoding="utf-8") as f:
+                f.write(f"{self.email}:{self.password}:{self.username}\n")
+        else:
+            raise RegistrationException(f"Create acc response: | {response}")
 
-        with open("logs/new_accounts.txt", "a", encoding="utf-8") as f:
-            f.write(f"{self.email}:{self.password}:{self.username}\n")
-
-        return await response.json()
+        return response
 
     async def enter_account(self):
         res_json = await self.handle_login()
         self.website_headers['Authorization'] = res_json['result']['data']['accessToken']
-
+        json_data = await self.retrieve_user()
+        
+        userId = json_data.get('result', {}).get('data', {}).get("userId", "")
+        
+        #logger.info(f"{self.id} | {self.email} | {userId}")
         return res_json['result']['data']['userId']
 
     @retry(stop=stop_after_attempt(3),
            before_sleep=lambda retry_state, **kwargs: logger.info(f"Retrying... {retry_state.outcome.exception()}"),
            reraise=True)
+           
     async def retrieve_user(self):
         url = 'https://api.getgrass.io/retrieveUser'
 
@@ -90,78 +105,39 @@ class GrassRest(BaseClient):
 
         return await response.json()
 
-    async def claim_rewards_handler(self):
-        handler = retry(
-            stop=stop_after_attempt(3),
-            before_sleep=lambda retry_state, **kwargs: logger.info(f"{self.id} | Retrying to claim rewards... "
-                                                                   f"Continue..."),
-            wait=wait_random(5, 7),
-            reraise=True
-        )
-
-        for _ in range(8):
-            await handler(self.claim_reward_for_tier)()
-            await asyncio.sleep(random.uniform(1, 3))
-
-        return True
-
-    async def claim_reward_for_tier(self):
-        url = 'https://api.getgrass.io/claimReward'
-
-        response = await self.session.post(url, headers=self.website_headers, proxy=self.proxy)
-
-        assert (await response.json()).get("result") == {}
-        return True
-
-    async def get_points_handler(self):
-        handler = retry(
-            stop=stop_after_attempt(3),
-            before_sleep=lambda retry_state, **kwargs: logger.info(f"{self.id} | Retrying to get points... "
-                                                                   f"Continue..."),
-            wait=wait_random(5, 7),
-            reraise=True
-        )
-
-        return await handler(self.get_points)()
-
-    async def get_points(self):
-        url = 'https://api.getgrass.io/users/earnings/epochs'
-
-        response = await self.session.get(url, headers=self.website_headers, proxy=self.proxy)
-
-        logger.debug(f"{self.id} | Get Points response: {await response.text()}")
-
-        res_json = await response.json()
-        points = res_json.get('data', {}).get('epochEarnings', [{}])[0].get('totalCumulativePoints')
-
-        if points is not None:
-            return points
-        elif points := res_json.get('error', {}).get('message'):
-            if points == "User epoch earning not found.":
-                return 0
-            return points
-        else:
-            return "Can't get points."
-
     async def handle_login(self):
         handler = retry(
-            stop=stop_after_attempt(12),
+            stop=stop_after_attempt(1),
             retry=retry_if_not_exception_type((LoginException, ProxyBlockedException)),
             before_sleep=lambda retry_state, **kwargs: logger.info(f"{self.id} | Login retrying... "
                                                                    f"{retry_state.outcome.exception()}"),
-            wait=wait_random(8, 12),
+            wait=wait_random(8, 120),
             reraise=True
         )
 
         return await handler(self.login)()
 
     async def login(self):
-        url = 'https://api.getgrass.io/login'
-
+        url = 'https://api.getgrass.io/sendOtp'
+        
         json_data = {
-            'password': self.password,
-            'username': self.email,
+            'email': self.email,
+            'marketingEmailConsent': False,
+            'page': "login",
+            'recaptchaToken': "",
+            'referralCode': "",
+            'termsAccepted': False,
         }
+        
+        logger.info(f"{self.id} | {self.email} | Captcha solving process...")
+
+        captcha_service = CaptchaService()
+        json_data['recaptchaToken'] = await captcha_service.get_captcha_token_async()
+        
+        logger.info(f"{self.id} | {self.email} | Captcha solved.")
+        
+        now = datetime.now(timezone.utc)
+        await asyncio.sleep(2)
 
         response = await self.session.post(url, headers=self.website_headers, data=json.dumps(json_data),
                                            proxy=self.proxy)
@@ -171,6 +147,9 @@ class GrassRest(BaseClient):
                 raise LoginException(f"{self.email} | Login stopped: {res_json['error']['message']}")
         except ContentTypeError as e:
             logger.info(f"{self.id} | Login response: Could not parse response as JSON. '{e}'")
+            
+        await asyncio.sleep(20)
+        response_data = await self.confirm_email(self.password, now)
 
         resp_text = await response.text()
 
@@ -183,28 +162,40 @@ class GrassRest(BaseClient):
         if response.status != 200:
             raise ClientConnectionError(f"Login response: | {resp_text}")
 
-        return await response.json()
+        return response_data
 
-    async def confirm_email(self, imap_pass: str):
-        await self.send_approve_link(endpoint="sendEmailVerification")
-        await self.approve_email(imap_pass, email_subject="Verify Your Email for Grass", endpoint="confirmEmail")
+    async def confirm_email(self, imap_pass: str, now: datetime):
+        response_data = await self.approve_email(imap_pass, now, endpoint="verifyOtp")
 
-        logger.info(f"{self.id} | {self.email} approved!")
+        if response_data:
+            logger.success(f"{self.id} | {self.email} approved!")
+            
+        return response_data
 
-    async def confirm_wallet_by_email(self, imap_pass: str):
-        await self.approve_email(imap_pass, email_subject="Verify Your Wallet Address for Grass",
-                                 endpoint="confirmWalletAddress")
+    async def confirm_wallet_by_email(self, imap_pass: str, now: datetime):
+        await self.approve_email_wallet(imap_pass, now, endpoint="confirmWalletAddress")
 
-        logger.info(f"{self.id} | {self.email} wallet approved!")
+        logger.success(f"{self.id} | {self.email} wallet approved!")
 
-    async def approve_email(self, imap_pass: str, email_subject: str, endpoint: str):
-        verify_token = await self.get_email_approve_token(imap_pass, email_subject)
-        return await self.approve_email_handler(verify_token, endpoint)
+    async def approve_email(self, imap_pass: str, now: datetime, endpoint: str):
+        verify_token = await self.get_email_approve_token(imap_pass, now)
+        
+        if verify_token:
+            return await self.approve_email_handler(verify_token, endpoint)
+        else:
+            return None
+        
+    async def approve_email_wallet(self, imap_pass: str, now: datetime, endpoint: str):
+        verify_token = await self.get_email_approve_token_wallet(imap_pass, now)
+        if verify_token:
+            return await self.approve_email_handler_wallet(verify_token, endpoint)
+        else:
+            return None
 
     async def send_approve_link(self, endpoint: str):
         @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_random(5, 7),
+            stop=stop_after_attempt(1),
+            wait=wait_random(20, 25),
             reraise=True,
             before_sleep=lambda retry_state, **kwargs: logger.info(f"{self.id} | Retrying to send {endpoint}... "
                                                                    f"Continue..."),
@@ -212,12 +203,12 @@ class GrassRest(BaseClient):
         async def approve_email_retry():
             url = f'https://api.getgrass.io/{endpoint}'
 
-            json_data = {
-                'email': self.email,
-            }
+            # json_data = {
+                # 'email': self.email,
+            # }
 
             response = await self.session.post(
-                url, headers=self.website_headers, proxy=self.proxy, data=json.dumps(json_data)
+                url, headers=self.website_headers, proxy=self.proxy#, data=json.dumps(json_data)
             )
             response_data = await response.json()
 
@@ -231,7 +222,39 @@ class GrassRest(BaseClient):
     async def approve_email_handler(self, verify_token: str, endpoint: str):
         @retry(
             stop=stop_after_attempt(3),
-            wait=wait_random(5, 7),
+            wait=wait_random(25, 30),
+            reraise=True,
+            before_sleep=lambda retry_state, **kwargs: logger.info(f"{self.id} | Retrying to approve {endpoint}... "
+                                                                   f"Continue..."),
+        )
+        async def approve_email_retry():
+            headers = self.website_headers.copy()
+            #headers['Authorization'] = verify_token
+            
+            json_data = {
+                'email': self.email,
+                'otp': verify_token,
+            }
+
+            url = f'https://api.getgrass.io/{endpoint}'
+            response = await self.session.post(
+                url, headers=headers, proxy=self.proxy, data=json.dumps(json_data)
+            )
+            response_data = await response.json()
+            logger.debug(f"response_data - {response_data}")
+
+            result_data = response_data.get("result", {}).get("data", {})
+            if 'email' not in result_data:
+                raise Exception(response_data)
+                
+            return response_data
+
+        return await approve_email_retry()
+        
+    async def approve_email_handler_wallet(self, verify_token: str, endpoint: str):
+        @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_random(25, 30),
             reraise=True,
             before_sleep=lambda retry_state, **kwargs: logger.info(f"{self.id} | Retrying to approve {endpoint}... "
                                                                    f"Continue..."),
@@ -266,7 +289,7 @@ Nonce: {timestamp}"""
 
     async def link_wallet(self, private_key: str):
         @retry(
-            stop=stop_after_attempt(3),
+            stop=stop_after_attempt(2),
             wait=wait_random(5, 7),
             reraise=True,
             before_sleep=lambda retry_state, **kwargs: logger.info(f"{self.id} | Retrying to send link wallet... "
@@ -279,12 +302,15 @@ Nonce: {timestamp}"""
             signatures = self.sign_message(private_key, timestamp)
 
             json_data = {
-                'signedMessage': signatures[2],
-                'publicKey': signatures[1],
-                'walletAddress': signatures[0],
-                'timestamp': timestamp,
+                'isAfterCountdown': True,
                 'isLedger': False,
+                'publicKey': signatures[1],
+                'signedMessage': signatures[2],
+                'timestamp': timestamp,
+                'walletAddress': signatures[0],
             }
+            
+            await asyncio.sleep(random.uniform(5, 10))
 
             response = await self.session.post(url, headers=self.website_headers, proxy=self.proxy, json=json_data)
             response_data = await response.json()
@@ -302,25 +328,45 @@ Nonce: {timestamp}"""
 
         return await linking_wallet()
 
-    async def get_email_approve_token(self, imap_pass: str, email_subject: str) -> str:
+    async def get_email_approve_token(self, imap_pass: str, now: datetime) -> str:
         try:
-            logger.info(f"{self.id} | {self.email} Getting email approve msg...")
-            if SEMI_AUTOMATIC_APPROVE_LINK:
-                result = {'success': True,
-                          'msg': input(f"Please, paste approve link from {self.email} and press Enter: ").strip()}
-            else:
-                mail_utils = MailUtils(self.email, imap_pass, self.proxy)
-                result = await mail_utils.get_msg_async(to=self.email, #from_="no-reply@grassfoundation.io",
-                                                        subject=email_subject, delay=60)
+            logger.info(f"{self.id} | {self.email} | Searching for code in email...")
 
+            mail_utils = MailUtils(self.email, imap_pass, self.proxy)
+            result = await mail_utils.get_msg_async(to=self.email, delay=EMAIL_WAIT_TIMEOUT, utc_now=now)   
+            
+            if result['success']:      
+                email_subject = result.get('subject', 'Unknown Subject')
+                    
+                match = re.search(r"\b\d{6}\b", email_subject)
+                if match:
+                    verify_token = match.group() 
+                    return verify_token 
+                else:
+                    raise EmailApproveLinkNotFoundException(f"Email approve code not found!")
+            else:
+                logger.error(f"{self.id} | {self.email} {result['msg']}")
+                return None
+        except Exception as e:
+            logger.error(f"Error in getting email approve token for {self.id} | {self.email}: {str(e)}")
+            return None
+            
+    async def get_email_approve_token_wallet(self, imap_pass: str, now: datetime) -> str:
+        try:
+            logger.info(f"{self.id} | {self.email} Searching for link in email...")
+
+            mail_utils = MailUtils(self.email, imap_pass, self.proxy)
+            result = await mail_utils.get_msg_async(to=self.email, delay=EMAIL_WAIT_TIMEOUT, utc_now=now)                                                                     
+                    
             if result['success']:
                 verify_token = result['msg'].split('token=')[1].split('/')[0]
                 return verify_token
             else:
-                raise EmailApproveLinkNotFoundException(
-                    f"{self.id} | {self.email} Email approve link not found for minute! Exited!")
+                logger.error(f"{self.id} | {self.email} {result['msg']}")
+                return None
         except Exception as e:
-            raise EmailApproveLinkNotFoundException(f"{self.id} | {self.email} | Email approve: {e}")
+            logger.error(f"Error in getting email approve token for {self.id} | {self.email}: {str(e)}")
+            return None
 
     async def get_browser_id(self):
         res_json = await self.get_user_info()
@@ -406,37 +452,30 @@ Nonce: {timestamp}"""
     #     device_info = await self.get_device_info(device_id, user_id)
     #     return device_info['data']['final_score']
 
-    async def get_json_params(self, params, user_referral: str, main_referral: str = "erxggzon61FWrJ9",
-                              role_stable: str = "726566657272616c"):
-        self.username = Person().username
 
-        referrals = {
-            "my_refferral": main_referral,
-            "user_refferal": user_referral
-        }
+    async def get_json_params(self, user_referral: str, main_referral: str = "94X6kaAWvEXmld7"):
+        self.username = Person().username
+        
+        referral_code = random.choice([user_referral, main_referral])
 
         json_data = {
             'email': self.email,
-            'password': self.password,
-            'role': 'USER',
-            'referral': random.choice(list(referrals.items())),
-            'username': self.username,
+            'marketingEmailConsent': True,
+            'page': "register",
             'recaptchaToken': "",
-            'listIds': [
-                15,
-            ],
+            'referralCode': referral_code,
+            'termsAccepted': True,
         }
+        
+        logger.info(f"{self.id} | {self.email} | Captcha solving process...")
 
         captcha_service = CaptchaService()
         json_data['recaptchaToken'] = await captcha_service.get_captcha_token_async()
-
-        json_data.pop(bytes.fromhex(role_stable).decode("utf-8"), None)
-        json_data[bytes.fromhex('726566657272616c436f6465').decode("utf-8")] = (
-            random.choice([random.choice(ast.literal_eval(bytes.fromhex(loguru).decode("utf-8"))),
-                           referrals[bytes.fromhex('757365725f726566666572616c').decode("utf-8")] or
-                           random.choice(ast.literal_eval(bytes.fromhex(loguru).decode("utf-8")))]))
+        
+        logger.info(f"{self.id} | {self.email} | Captcha solved.")
 
         return json_data
+
 
     async def update_ip(self):
         self.ip = await self.get_ip()

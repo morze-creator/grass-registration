@@ -9,13 +9,12 @@ import asyncio
 import json
 from data.config import (
     ACCOUNTS_FILE_PATH, PROXIES_FILE_PATH, REGISTER_ACCOUNT_ONLY, THREADS,
-    REGISTER_DELAY, CLAIM_REWARDS_ONLY, APPROVE_EMAIL, APPROVE_WALLET_ON_EMAIL,
-    MINING_MODE, CONNECT_WALLET, WALLETS_FILE_PATH, SEND_WALLET_APPROVE_LINK_TO_EMAIL,
-    SINGLE_IMAP_ACCOUNT, SEMI_AUTOMATIC_APPROVE_LINK, PROXY_DB_PATH, MIN_PROXY_SCORE,
-    EMAIL_FOLDER, IMAP_DOMAIN, STOP_ACCOUNTS_WHEN_SITE_IS_DOWN, CHECK_POINTS,
-    TWO_CAPTCHA_API_KEY, ANTICAPTCHA_API_KEY, CAPMONSTER_API_KEY,
-    CAPSOLVER_API_KEY, CAPTCHAAI_API_KEY, USE_PROXY_FOR_IMAP, SHOW_LOGS_RARELY, REF_CODE,
-    NODE_TYPE
+    REGISTER_DELAY, APPROVE_WALLET_ON_EMAIL,
+    CONNECT_WALLET, WALLETS_FILE_PATH, SEND_WALLET_APPROVE_LINK_TO_EMAIL,
+    SINGLE_IMAP_ACCOUNT,
+    EMAIL_FOLDER, IMAP_DOMAIN,
+    TWO_CAPTCHA_API_KEY, ANTICAPTCHA_API_KEY,
+    USE_PROXY_FOR_IMAP
 )
 from PySide6.QtCore import QThread, Signal, QUrl
 from main import main
@@ -140,7 +139,7 @@ def update_global_config():
             for service, param_name in globals()['MainApp'].captcha_services.items():
                 globals()['MainApp'].local_captcha_keys[service] = config_globals.get(param_name, "")
 
-        return config_globals.get('MINING_MODE', False), config_globals.get('REGISTER_ACCOUNT_ONLY', False)
+        return False, config_globals.get('REGISTER_ACCOUNT_ONLY', False)
 
     except Exception as e:
         logger.error(f"Error updating global config: {e}")
@@ -186,67 +185,45 @@ class GrassInterface(QMainWindow):
         # Dictionary for storing captcha service API keys
         self.local_captcha_keys = {
             "TWO_CAPTCHA": TWO_CAPTCHA_API_KEY,
-            "ANTICAPTCHA": ANTICAPTCHA_API_KEY,
-            "CAPMONSTER": CAPMONSTER_API_KEY,
-            "CAPSOLVER": CAPSOLVER_API_KEY,
-            "CAPTCHAAI": CAPTCHAAI_API_KEY
+            "ANTICAPTCHA": ANTICAPTCHA_API_KEY
         }
         
         # Mapping of captcha services to config parameters
         self.captcha_services = {
             "TWO_CAPTCHA": "TWO_CAPTCHA_API_KEY",
-            "ANTICAPTCHA": "ANTICAPTCHA_API_KEY",
-            "CAPMONSTER": "CAPMONSTER_API_KEY",
-            "CAPSOLVER": "CAPSOLVER_API_KEY",
-            "CAPTCHAAI": "CAPTCHAAI_API_KEY"
+            "ANTICAPTCHA": "ANTICAPTCHA_API_KEY"
         }
         
         # Save initial values for change tracking
         self.initial_params = {
             'THREADS': THREADS,
-            'MIN_PROXY_SCORE': MIN_PROXY_SCORE,
             'EMAIL_FOLDER': EMAIL_FOLDER,
             'IMAP_DOMAIN': IMAP_DOMAIN,
             'REGISTER_DELAY': REGISTER_DELAY,
-            'APPROVE_EMAIL': APPROVE_EMAIL,
             'CONNECT_WALLET': CONNECT_WALLET,
             'SEND_WALLET_APPROVE_LINK_TO_EMAIL': SEND_WALLET_APPROVE_LINK_TO_EMAIL,
             'APPROVE_WALLET_ON_EMAIL': APPROVE_WALLET_ON_EMAIL,
-            'SEMI_AUTOMATIC_APPROVE_LINK': SEMI_AUTOMATIC_APPROVE_LINK,
             'SINGLE_IMAP_ACCOUNT': SINGLE_IMAP_ACCOUNT,
-            'USE_PROXY_FOR_IMAP': USE_PROXY_FOR_IMAP,
-            'STOP_ACCOUNTS_WHEN_SITE_IS_DOWN': STOP_ACCOUNTS_WHEN_SITE_IS_DOWN,
-            'CHECK_POINTS': CHECK_POINTS,
-            'SHOW_LOGS_RARELY': SHOW_LOGS_RARELY,
-            'CLAIM_REWARDS_ONLY': CLAIM_REWARDS_ONLY,
-            'REF_CODE': REF_CODE,
-            'NODE_TYPE': NODE_TYPE,
+            'USE_PROXY_FOR_IMAP': USE_PROXY_FOR_IMAP
         }
         
         # Initialize fields
         self.ui.lineEdit_Threads.setText(str(THREADS))
-        self.ui.lineEdit_MinProxyScore.setText(str(MIN_PROXY_SCORE))
         self.ui.lineEdit_EmailFolder.setText(EMAIL_FOLDER)
         self.ui.lineEdit_ImapDomain.setText(IMAP_DOMAIN)
-        self.ui.lineEdit_REFCODE.setText(REF_CODE)
         self.ui.lineEdit_Min.setText(str(REGISTER_DELAY[0]))
         self.ui.lineEdit_Max.setText(str(REGISTER_DELAY[1]))
 
         # Convert boolean values from config to Python format
         '''Tab1'''
-        self.ui.checkBox_ApproveEmail.setChecked(self.convert_to_bool(APPROVE_EMAIL))
         self.ui.checkBox_ConnectWallet.setChecked(self.convert_to_bool(CONNECT_WALLET))
         self.ui.checkBox_SendWallerApproveForEmail.setChecked(self.convert_to_bool(SEND_WALLET_APPROVE_LINK_TO_EMAIL))
         self.ui.checkBox_ApproveWalletOnEmail.setChecked(self.convert_to_bool(APPROVE_WALLET_ON_EMAIL))
-        self.ui.checkBox_SemiAutoApproveLink.setChecked(self.convert_to_bool(SEMI_AUTOMATIC_APPROVE_LINK))
         self.ui.checkBox_SingleMapAccount.setChecked(self.convert_to_bool(SINGLE_IMAP_ACCOUNT))
         self.ui.checkBox_UseProxyForImap.setChecked(self.convert_to_bool(USE_PROXY_FOR_IMAP))
         '''Tab2'''
-        self.ui.checkBox_TimeOutFarm.setChecked(self.convert_to_bool(STOP_ACCOUNTS_WHEN_SITE_IS_DOWN))
-        self.ui.checkBox_CheckPoints.setChecked(self.convert_to_bool(CHECK_POINTS))
-        self.ui.checkBox_RarelyShowLogs.setChecked(self.convert_to_bool(SHOW_LOGS_RARELY))
         '''Tab3'''
-        self.ui.checkBox_ClaimRewardOnly.setChecked(self.convert_to_bool(CLAIM_REWARDS_ONLY))
+        #self.ui.checkBox_ClaimRewardOnly.setChecked(self.convert_to_bool(CLAIM_REWARDS_ONLY))
 
         # Clear comboBox and add values
         self.ui.comboBox_CaptchaService.clear()
@@ -289,9 +266,6 @@ class GrassInterface(QMainWindow):
         self.ui.pushButton_Instructions.clicked.connect(self.open_instructions)
         self.ui.pushButton_more.clicked.connect(self.open_telegram)
         self.ui.pushButton_Web3.clicked.connect(self.open_web3)
-
-        # Connect NODE_TYPE changes
-        self.ui.comboBox_NODE_TYPE.currentTextChanged.connect(self.update_node_type)
         
         # Set initial NODE_TYPE
         self.set_initial_node_type()
@@ -333,24 +307,18 @@ class GrassInterface(QMainWindow):
         try:
             params_to_save = {
                 'THREADS': int(self.ui.lineEdit_Threads.text()),
-                'MIN_PROXY_SCORE': int(self.ui.lineEdit_MinProxyScore.text()),
                 'EMAIL_FOLDER': self.ui.lineEdit_EmailFolder.text(),
                 'IMAP_DOMAIN': self.ui.lineEdit_ImapDomain.text(),
-                'REF_CODE': self.ui.lineEdit_REFCODE.text(),
                 'REGISTER_DELAY': (
                     int(self.ui.lineEdit_Min.text()),
                     int(self.ui.lineEdit_Max.text())
                 ),
-                'APPROVE_EMAIL': self.ui.checkBox_ApproveEmail.isChecked(),
                 'CONNECT_WALLET': self.ui.checkBox_ConnectWallet.isChecked(),
                 'SEND_WALLET_APPROVE_LINK_TO_EMAIL': self.ui.checkBox_SendWallerApproveForEmail.isChecked(),
                 'APPROVE_WALLET_ON_EMAIL': self.ui.checkBox_ApproveWalletOnEmail.isChecked(),
                 'SINGLE_IMAP_ACCOUNT': self.ui.checkBox_SingleMapAccount.isChecked(),
                 'USE_PROXY_FOR_IMAP': self.ui.checkBox_UseProxyForImap.isChecked(),
-                'STOP_ACCOUNTS_WHEN_SITE_IS_DOWN': self.ui.checkBox_TimeOutFarm.isChecked(),
-                'CHECK_POINTS': self.ui.checkBox_CheckPoints.isChecked(),
-                'SHOW_LOGS_RARELY': self.ui.checkBox_RarelyShowLogs.isChecked(),
-                'CLAIM_REWARDS_ONLY': self.ui.checkBox_ClaimRewardOnly.isChecked(),
+                #'CLAIM_REWARDS_ONLY': self.ui.checkBox_ClaimRewardOnly.isChecked(),
             }
 
             # Save main parameters
@@ -408,7 +376,6 @@ class GrassInterface(QMainWindow):
         """
         try:
             # Set correct modes for farming
-            self.update_config_param("MINING_MODE", True)
             self.update_config_param("REGISTER_ACCOUNT_ONLY", False)
             
             # Save changes and reload modules
@@ -455,7 +422,6 @@ class GrassInterface(QMainWindow):
         """
         try:
             # Set correct modes for registration
-            self.update_config_param("MINING_MODE", False)
             self.update_config_param("REGISTER_ACCOUNT_ONLY", True)
             
             # Save changes and reload modules
@@ -601,30 +567,6 @@ class GrassInterface(QMainWindow):
             "1.25x": "1_25x",
             "2x": "2x"
         }
-        
-        # Get current value from config and find corresponding index
-        current_value = NODE_TYPE.replace(".", "_") if NODE_TYPE else "1x"
-        index = self.ui.comboBox_NODE_TYPE.findText(current_value)
-        if index >= 0:
-            self.ui.comboBox_NODE_TYPE.setCurrentIndex(index)
-
-    def update_node_type(self):
-        """Updates NODE_TYPE when comboBox value changes"""
-        node_type_map = {
-            "1x": "1x",
-            "1_25x": "1.25x",
-            "2x": "2x"
-        }
-        
-        selected_value = self.ui.comboBox_NODE_TYPE.currentText()
-        new_value = node_type_map.get(selected_value, "1x")
-        
-        try:
-            self.update_config_param('NODE_TYPE', new_value)
-            self.initial_params['NODE_TYPE'] = new_value
-            logger.info(f"NODE_TYPE updated to {new_value}")
-        except Exception as e:
-            logger.error(f"Error updating NODE_TYPE: {e}")
 
 def start_ui():
     app = QApplication(sys.argv)

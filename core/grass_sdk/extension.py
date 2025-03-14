@@ -12,8 +12,6 @@ from core.utils.exception import WebsocketClosedException, ProxyForbiddenExcepti
 
 import os, base64
 
-from data.config import NODE_TYPE
-
 
 class GrassWs:
     def __init__(self, user_agent: str = None, proxy: str = None):
@@ -54,12 +52,12 @@ class GrassWs:
             raise e
 
     async def send_message(self, message):
-        # logger.info(f"Sending: {message}")
+        logger.info(f"Sending: {message}")
         await self.websocket.send_str(message)
 
     async def receive_message(self):
         msg = await self.websocket.receive()
-        # logger.info(f"Received: {msg}")
+        logger.info(f"Received: {msg}")
 
         if msg.type == WSMsgType.CLOSED:
             raise WebsocketClosedException(f"Websocket closed: {msg}")

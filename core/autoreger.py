@@ -35,6 +35,8 @@ class AutoReger:
                 consumables.append([extra] * acc_len)
 
         accounts = list(zip_longest(*consumables))
+        
+        #logger.info(f"accounts - {accounts}")
 
         if not accounts or not accounts[0]:
             logger.warning("No accounts found :(")
