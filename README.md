@@ -13,7 +13,7 @@ Discover the latest moves in my Telegram Channel:
 
 ![image](https://github.com/user-attachments/assets/cf4b8b45-0c5d-4c65-8065-6424e78e8f0b)
 
-### Quick Start 📚
+## Quick Start 📚
    1. To install libraries on Windows click on `INSTALL.bat`.
    2. To start bot use `START.bat`.
 
@@ -42,3 +42,16 @@ ANTICAPTCHA_API_KEY = ''
 REGISTER_ACCOUNT_ONLY = False
 CONNECT_WALLET_AND_APPROVE = True
 ```
+## Stay Connected 📒
+Channel Telegram: [Telegram](https://t.me/morze_crypto)  
+Chat Telegram: [Telegram](https://t.me/+2tiSWUvVHDI1OWMy)  
+
+## Donation 💸
+If you would like to support the development of this project, you can make a donation using the following addresses:
+
+   - Solana: `EkWhh25qTN3LaToLJYJ72W2GmBtSwkQ43C2YTrXcNS6w`
+   - EVM: `0x13fc513856594f14c95f6558e080c16240caC999`
+   - BTC: `bc1qs8uk7kxu2tk8c0sgamwka2d99y2f53flkuswgr`
+
+## Disclaimer ❗
+This tool is for educational purposes only. Use it at your own risk.
