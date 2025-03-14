@@ -43,8 +43,8 @@ REGISTER_ACCOUNT_ONLY = False
 CONNECT_WALLET_AND_APPROVE = True
 ```
 ## Stay Connected 📒
-Channel Telegram: [Telegram](https://t.me/morze_crypto)  
-Chat Telegram: [Telegram](https://t.me/+2tiSWUvVHDI1OWMy)  
+Channel Telegram: [morze](https://t.me/morze_crypto)  
+Chat Telegram: [morze CHAT](https://t.me/+2tiSWUvVHDI1OWMy)  
 
 ## Donation 💸
 If you would like to support the development of this project, you can make a donation using the following addresses:
