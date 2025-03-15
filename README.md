@@ -36,7 +36,7 @@ ANTICAPTCHA_API_KEY = ''
 ```
  - Provide emails and proxies to register accounts as below!
 
-  ![image](https://github.com/user-attachments/assets/0d5d088b-f1d3-4484-9d9b-31fe7696083e)
+  ![image](https://github.com/user-attachments/assets/7cfee1cc-9131-4e0b-8e2e-963ca151e909)
 
   > If you plan to use a single email for verifying all accounts, you don't need to specify a password. Instead, fill in the `SINGLE_IMAP_ACCOUNT` variable in `data/config.py`.
 
