@@ -14,8 +14,12 @@ Discover the latest moves in my Telegram Channel:
 ![image](https://github.com/user-attachments/assets/cf4b8b45-0c5d-4c65-8065-6424e78e8f0b)
 
 ## Quick Start 📚
-   1. To install libraries on Windows click on `INSTALL.bat`.
-   2. To start bot use `START.bat`.
+   1. Clone this repository or download the archive:
+```
+git clone https://github.com/morze-creator/grass-registration
+```
+   2. To install libraries on Windows click on `INSTALL.bat`.
+   3. To start bot use `START.bat`.
 
 ### Options 📧
 
@@ -42,6 +46,7 @@ ANTICAPTCHA_API_KEY = ''
 REGISTER_ACCOUNT_ONLY = False
 CONNECT_WALLET_AND_APPROVE = True
 ```
+ - in `data/wallets.py` enter Solana private keys in Base58 format.
 ## Stay Connected 📒
 Channel Telegram: [morze](https://t.me/morze_crypto)  
 Chat Telegram: [morze CHAT](https://t.me/+2tiSWUvVHDI1OWMy)  
